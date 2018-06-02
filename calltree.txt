@@ -1,0 +1,33 @@
+__clear_bss : rjmp to main
+main
+	user_init
+	proc_data
+	user_proc
+		crc_chk
+		write_data (2 push)
+			buf_save
+			recalc_mir_byte
+			check_enable_mir
+			change_mir_state
+		check_enable_mir
+		change_mir_state
+		buf_cmp
+		prepare_read
+		write_perm
+	reply_status_noret
+	reply
+		sync_reply
+		reply_byte
+	sync_reply
+	user_frame_end
+	user_pwr_cycle
+		change_mir_state
+	recalc_mir_byte
+
+__vector_8
+__vector_7
+__vector_2
+__vector_20
+
+Total 10 stack bytes
+

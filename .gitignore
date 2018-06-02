@@ -11,6 +11,7 @@
 *.ilk
 *.map
 *.exp
+*.lst
 
 # Precompiled Headers
 *.gch
@@ -50,3 +51,9 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Binares
+*.bin
+
+# Mac
+.DS_Store
