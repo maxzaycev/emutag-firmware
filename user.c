@@ -170,14 +170,6 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) __attri
  */
 uint8_t write_data(uint8_t page, uint8_t src);
 
-/*  write_perm() : Computes whether ACK or NAK should be returned after WRITE or COMPATIBILITY_WRITE commands.
- *               : The result depends on page, lock-bits, block-locking bits, and lock switch position.
- *
- *  page = number of 4-byte block in memory for which write permissions are to be checked
- *  returns 0 if NAK needs to be returned, 1 if ACK
- */
-uint8_t write_perm(uint8_t page);
-
 /*  buf_save() : Writes bytes from rx_buf[] to mem_array[] in WRITE or COMPATIBILITY_WRITE commands.
  *             : Data is transferred according to rules defined in MIFARE Ultralight write access conditions.
  *             : E.g. page 3 (OTP) is OR'ed with incoming data in locked mode, and overwritten in unlocked mode.
@@ -273,15 +265,6 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) {
 		if(rx_bits_total == 7) {
 			if(op == C_REQA || op == C_WUPA) {
 				if(state == S_IDLE && (op == C_WUPA || (~ctrl_flags & 1 << F_ST_HALT))) {
-					// activate new lock config: moved to write_perm() because in Ultralight EV1 update is immediate
-					/*
-					lock_b0 = mem_array[B_LOCK_L];
-					lock_b1 = mem_array[B_LOCK_H];
-					lock_b2 = mem_array[B_DYNL_0];
-					lock_b3 = mem_array[B_DYNL_1];
-					lock_b4 = mem_array[B_DYNL_2];
-					*/
-					
 					// strobe lock switch position into shared register's bit and initialize state_auth
 					asm volatile(
 						"in	r24, %1		\n\t"
@@ -424,7 +407,7 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) {
 				
 				if(rx_bytes != i) return;
 				
-				if((arg < NUM_PAGES && write_perm(arg)) || (arg >= P_CNT0 && arg < SIG_PAGES_END && (~lock_sw & 1 << LOCK_SW_BIT))) {
+				if((arg < NUM_PAGES) || (arg >= P_CNT0 && arg < SIG_PAGES_END && (~lock_sw & 1 << LOCK_SW_BIT))) {
 					if(op == C_WRITE) {
 						reply_status(write_data(arg, 2));
 					}
@@ -623,42 +606,6 @@ uint8_t write_data(uint8_t page, uint8_t src) {
 	else { buf_save(page, src); }
 	
 	return R_ACK;
-}
-
-uint8_t write_perm(uint8_t page) {
-	// lock bits are updated immediately in Ultralight EV1
-	lock_b0 = mem_array[B_LOCK_L];
-	lock_b1 = mem_array[B_LOCK_H];
-	lock_b2 = mem_array[B_DYNL_0];
-	lock_b3 = mem_array[B_DYNL_1];
-	//lock_b4 = mem_array[B_DYNL_2]; // lock_b4 is shared with lock_sw and state_auth which are updated on REQA/WUPA
-	
-	if(~lock_sw & 1 << LOCK_SW_BIT) return 1;
-	
-	if((~state_auth & 1 << S_AUTH_BIT) && page >= auth0) return 0;
-	
-	if(page < 16) {
-		if(page < 3) {
-			if(page < 2)  { return 0; }
-			else          { return 1; }
-		}
-		else {
-			if(page < 8)  { if(lock_b0 & pgm_read_byte(&(perm_tab[page])))     return 0; }
-			else          { if(lock_b1 & pgm_read_byte(&(perm_tab[page & 7]))) return 0; }
-		}
-	}
-	else {
-		if(page < USR_PAGES_END) {
-			if(page < 32) { if(lock_b2 & pgm_read_byte(&(perm_tab[(page >> 1) - 8])))  return 0; }
-			else          { if(lock_b3 & pgm_read_byte(&(perm_tab[(page >> 1) - 16]))) return 0; }
-		}
-		else {
-			if(((page - 1) | 1) == 37 && (pwr_flags & 1 << CFG_READONLY)) { return 0; } // if page 37 or 38 with locked config
-			else                                                          { return 1; }
-		}
-	}
-	
-	return 1;
 }
 
 void buf_save(uint8_t page, uint8_t src) {
