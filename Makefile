@@ -11,6 +11,9 @@ all: size
 flash: build
 	avrdude $(PROGRAMMER) -p $(DEVICE) -U flash:w:main.bin:r -U eeprom:w:common.eep:r -U efuse:w:0xfe:m -U hfuse:w:0xdf:m -U lfuse:w:0xdf:m
 
+flash-only:
+	avrdude $(PROGRAMMER) -p $(DEVICE) -U flash:w:main.bin:r -U eeprom:w:common.eep:r -U efuse:w:0xfe:m -U hfuse:w:0xdf:m -U lfuse:w:0xdf:m
+
 clean:
 	rm -f user.o main.elf main.bin main.lst main.map
 

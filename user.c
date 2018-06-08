@@ -25,6 +25,11 @@
 #define C_CHK_TEAR	0x3E
 #define C_VCSL		0x4B
 
+//flash commands
+#define FC_READ		0xF0
+#define FC_WRITE	0xF1
+#define	FC_SHIFT	0xF2
+
 // response constants
 #define R_ATQA_H	0x00
 #define R_ATQA_L	0x44
@@ -76,6 +81,8 @@
 
 // Flash address of signature page (last page)
 #define SIG_ADDR	0x0FC0
+//Flash address of Dump
+#define DUMP	0x0F00
 
 // Simulation of write delay to internal EEPROM: 4.1 ms fixed from request
 // TIMER0 is counting with prescaler = 1024 with count reset after receiving incoming message
@@ -92,6 +99,10 @@ register volatile uint8_t lock_b2  asm("r9");
 register volatile uint8_t lock_b3  asm("r10");
 register volatile uint8_t lock_b4  asm("r11");
 
+register volatile uint8_t flash_state  asm("r12");
+
+#define NEED_WRITE	7
+#define NEED_READ	6
 // To save registers, lock switch position will be stored in MSB of lock_b4 containing BL-bits for pages 16-39
 #define lock_sw		lock_b4
 #define LOCK_SW_BIT	7
@@ -192,13 +203,7 @@ void prepare_read(void) __attribute__((noinline));
 void user_init(void) {
 	uint8_t *asm_dst, asm_len; // for macro
 	
-	mem_array[0x00] = 0x04;
-	mem_array[0x03] = 0x8C;
-	mem_array[0x09] = 0x48;
-	mem_array[B_DYNL_0 + 3] = 0xBD;
-	mem_array[B_MIRROR] = 0x04;
-	mem_array[B_AUTH0] = 0xFF;
-	mem_array[B_VCTID] = 0x05;
+	memcpy_P (mem_array, (PGM_VOID_P*)DUMP, NUM_PAGES*4);
 	
 	FILL_BUF(passwd, 0xFF, 4);
 	
@@ -210,7 +215,36 @@ void user_init(void) {
 void user_pwr_cycle(void) {
 	state = S_IDLE;
 	ctrl_flags &= ~(1 << F_ST_HALT);
-	
+
+	if(flash_state & 1 << NEED_WRITE){
+		uint8_t *asm_src =  mem_array; // for macro
+
+		asm volatile(
+			"ldi	r24, 3		\n\t" // Flash erase command = 00000011
+			"out	%1, r24		\n\t"
+			"spm			\n\t"
+			"ldi	r24, 1		\n\t" // Flash buffer fill command = 00000001
+			"ld	r0, X+		\n\t"
+			"cli			\n\t"
+			"ld	r1, X+		\n\t" // r1 is cleared by interrupt
+			"out	%1, r24		\n\t"
+			"sei			\n\t"
+			"spm			\n\t"
+			"subi	r30, 254		\n\t"
+			"andi	r30, 63		\n\t"
+			"brne	.-18		\n\t"
+			"clr	r1		\n\t"
+			"ldi	r24, 5		\n\t" // Flash write command = 00000101
+			"out	%1, r24		\n\t"
+			"spm			\n\t"
+			: "=x" (asm_src)
+			: "I" (_SFR_IO_ADDR(SPMCSR)), "0" (asm_src), "z" (DUMP)
+			: "r0", "r24"
+		);
+
+		flash_state &= ~(1 << NEED_WRITE);
+	}
+
 	sig_pages = 0;
 	SPMCSR = 1 << CTPB; // clear Flash page buffer
 	
@@ -539,6 +573,16 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) {
 				if(rx_bytes != 1) return;
 				
 				reply_std_frame((uint8_t*)((uint16_t)(&ntag_ver) | 0x8000), 8); // read from Flash
+			}
+
+			if(op == FC_WRITE){
+				flash_state |= 1 << NEED_WRITE;
+				reply_status(R_ACK);
+			}
+
+			if(op == FC_READ){
+				memcpy_P (mem_array, (PGM_VOID_P*)DUMP, NUM_PAGES*4);
+				reply_status(R_ACK);
 			}
 		}
 	}
