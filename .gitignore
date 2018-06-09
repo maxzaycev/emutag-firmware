@@ -2,7 +2,9 @@
 *.d
 
 # Object files
-user.o
+*.o
+!main.o
+!main-lowpwr.o
 *.ko
 *.obj
 *.elf
@@ -54,6 +56,7 @@ dkms.conf
 
 # Binares
 *.bin
+!tmpl.bin
 
 # Mac
 .DS_Store
