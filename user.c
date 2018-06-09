@@ -81,7 +81,7 @@
 
 // Flash address of signature page (last page)
 #define SIG_ADDR	0x0FC0
-//Flash address of Dump
+//Flash address of Dumps
 #define DUMP_1	0x0E40	//3648
 #define DUMP_2	0x0F00
 
@@ -233,30 +233,34 @@ void user_pwr_cycle(void) {
 		uint8_t *asm_src =  mem_array; // for macro
 
 		asm volatile(
+			"ldi	r28, 3		\n\t"
 			"ldi	r24, 3		\n\t" // Flash erase command = 00000011
 			"out	%1, r24		\n\t"
 			"spm			\n\t"
+			"cli			\n\t"  // r1 is cleared by interrupt
 			"ldi	r24, 1		\n\t" // Flash buffer fill command = 00000001
 			"ld	r0, X+		\n\t"
-			"cli			\n\t"
-			"ld	r1, X+		\n\t" // r1 is cleared by interrupt
+			"ld	r1, X+		\n\t"
 			"out	%1, r24		\n\t"
-			"sei			\n\t"
 			"spm			\n\t"
-			"subi	r30, 254		\n\t"
+			"adiw	r30, 2		\n\t"
 			"ldi	r25, 63		\n\t"
 			"and	r25, r30		\n\t"
-			"brne	.-20		\n\t"
+			"brne	.-16		\n\t"
+			"sei			\n\t"
 			"clr	r1		\n\t"
-			"subi	r30, 64		\n\t"
+			"sbiw	r30, 32		\n\t"
+			"sbiw	r30, 32		\n\t"
 			"ldi	r24, 5		\n\t" // Flash write command = 00000101
 			"out	%1, r24		\n\t"
 			"spm			\n\t"
-			"subi	r30, 192		\n\t"
-			"brne	.-42		\n\t"
+			"adiw	r30, 32	\n\t"
+			"adiw	r30, 32	\n\t"
+			"dec	r28		\n\t"
+			"brne	.-48		\n\t"
 			: "=x" (asm_src)
 			: "I" (_SFR_IO_ADDR(SPMCSR)), "0" (asm_src), "z" (((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2))
-			: "r0", "r24", "r25"
+			: "r0", "r24", "r25", "r28"
 		);
 
 		flash_state &= ~(1 << NEED_WRITE);
