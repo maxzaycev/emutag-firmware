@@ -101,8 +101,9 @@ register volatile uint8_t lock_b3  asm("r10");
 register volatile uint8_t lock_b4  asm("r11");
 
 register volatile uint8_t flash_state  asm("r12");
-#define NEED_WRITE	7
-#define NEED_READ	6
+#define NEED_WRITE_PART_1	2
+#define NEED_WRITE_PART_2	1
+#define NEED_WRITE_PART_3	0
 
 // To save registers, lock switch position will be stored in MSB of lock_b4 containing BL-bits for pages 16-39
 #define lock_sw		lock_b4
@@ -209,6 +210,7 @@ void user_init(void) {
 	lock_b0 = lock_b1 = lock_b2 = lock_b3 = lock_b4 = 0;
 
 	asm volatile(
+		"clr	r12		\n\t"
 		"in	r24, %1		\n\t"
 		"bst	r24, %2		\n\t"
 		"bld	%0, %3		\n\t"
@@ -229,40 +231,49 @@ void user_pwr_cycle(void) {
 	state = S_IDLE;
 	ctrl_flags &= ~(1 << F_ST_HALT);
 
-	if(flash_state & 1 << NEED_WRITE){
+	if(flash_state & (1 << NEED_WRITE_PART_1 | 1 << NEED_WRITE_PART_2 | 1 << NEED_WRITE_PART_3)){
 		uint8_t *asm_src =  mem_array; // for macro
 
 		asm volatile(
-			"ldi	r28, 3		\n\t"
+			"ldi	r28, 8		\n\t"	//TODO: no magic const 1<<3
+			"lsr	r28		\n\t"
+			"breq	.+58		\n\t" //to exit TODO: turn off bits on r12
+			"mov	r24, r12		\n\t"
+			"and	r24, r28	\n\t"
+			"brne	.+8		\n\t" //to erase
+			"subi	r26, 192		\n\t"
+			"inc	r30		\n\t"
+			"adiw	r30, 63		\n\t"
+			"rjmp	.-18		\n\t" //to test new
 			"ldi	r24, 3		\n\t" // Flash erase command = 00000011
 			"out	%1, r24		\n\t"
 			"spm			\n\t"
-			"cli			\n\t"  // r1 is cleared by interrupt
+			"ldi	r25, 32		\n\t"
 			"ldi	r24, 1		\n\t" // Flash buffer fill command = 00000001
+			"cli			\n\t"  // r1 is cleared by interrupt
 			"ld	r0, X+		\n\t"
 			"ld	r1, X+		\n\t"
 			"out	%1, r24		\n\t"
 			"spm			\n\t"
 			"subi	r30, 254		\n\t"
-			"ldi	r25, 63		\n\t"
-			"and	r25, r30		\n\t"
-			"brne	.-16		\n\t"
+			"dec	r25		\n\t"
+			"brne	.-14		\n\t" //to next word in page buffer
 			"sei			\n\t"
 			"clr	r1		\n\t"
 			"subi	r30, 64		\n\t"
 			"ldi	r24, 5		\n\t" // Flash write command = 00000101
 			"out	%1, r24		\n\t"
 			"spm			\n\t"
-			"adiw	r30, 32		\n\t"
-			"adiw	r30, 32		\n\t"
-			"dec	r28		\n\t"
-			"brne	.-46		\n\t"
+			"inc	r30		\n\t"
+			"adiw	r30, 63		\n\t"
+			"rjmp	.-62		\n\t" //to test new
+			"clr	r12		\n\t" //TODO: clear only n bits
 			: "=x" (asm_src)
 			: "I" (_SFR_IO_ADDR(SPMCSR)), "0" (asm_src), "z" (((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2))
 			: "r0", "r24", "r25", "r28"
 		);
-
-		flash_state &= ~(1 << NEED_WRITE);
+		//debug only
+		++cnt2[0];
 	}
 
 	sig_pages = 0;
@@ -596,7 +607,18 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) {
 			}
 
 			if(op == FC_WRITE){
-				flash_state |= 1 << NEED_WRITE;
+				if (arg == 0){
+					flash_state |= 1 << NEED_WRITE_PART_1 | 1 << NEED_WRITE_PART_2 | 1 << NEED_WRITE_PART_3;
+				}
+				else if(arg == 1){
+					flash_state |= 1 << NEED_WRITE_PART_1;
+				}
+				else if(arg == 2){
+					flash_state |= 1 << NEED_WRITE_PART_2;
+				}
+				else if(arg == 3){
+					flash_state |= 1 << NEED_WRITE_PART_3;
+				}
 				reply_status(R_ACK);
 			}
 
