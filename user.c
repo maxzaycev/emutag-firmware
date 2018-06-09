@@ -256,7 +256,7 @@ void user_pwr_cycle(void) {
 			"adiw	r30, 32		\n\t"
 			"adiw	r30, 32		\n\t"
 			"dec	r28		\n\t"
-			"brne	.-48		\n\t"
+			"brne	.-46		\n\t"
 			: "=x" (asm_src)
 			: "I" (_SFR_IO_ADDR(SPMCSR)), "0" (asm_src), "z" (((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2))
 			: "r0", "r24", "r25", "r28"
