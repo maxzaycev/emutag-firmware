@@ -208,19 +208,26 @@ void user_init(void) {
 	
 	lock_b0 = lock_b1 = lock_b2 = lock_b3 = lock_b4 = 0;
 
-	flash_state |= 1 << NEED_READ;
+	asm volatile(
+		"in	r24, %1		\n\t"
+		"bst	r24, %2		\n\t"
+		"bld	%0, %3		\n\t"
+		"bld	%0, %4		\n\t"
+		"ldi	r24, %5		\n\t"
+		"eor	%0, r24		\n\t" // invert S_AUTH_BIT in lock_b4 (same as lock_sw and state_auth)
+		: "=r" (lock_sw)
+		: "I" (_SFR_IO_ADDR(LOCK_PORT)), "I" (LOCK_PIN),
+			"I" (LOCK_SW_BIT), "I" (S_AUTH_BIT), "M" (1 << S_AUTH_BIT), "0" (lock_sw)
+		: "r24"
+	);
 
+	memcpy_P (mem_array, (PGM_VOID_P*) ((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2), NUM_PAGES*4);
 	user_pwr_cycle();
 }
 
 void user_pwr_cycle(void) {
 	state = S_IDLE;
 	ctrl_flags &= ~(1 << F_ST_HALT);
-
-	if(flash_state & 1 << NEED_READ){
-		memcpy_P (mem_array, (PGM_VOID_P*) ((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2), NUM_PAGES*4);
-		flash_state &= ~(1 << NEED_READ);
-	}
 
 	if(flash_state & 1 << NEED_WRITE){
 		uint8_t *asm_src =  mem_array; // for macro
@@ -257,7 +264,7 @@ void user_pwr_cycle(void) {
 
 	sig_pages = 0;
 	SPMCSR = 1 << CTPB; // clear Flash page buffer
-	
+
 	//pwr_flags = mem_array[B_ACCESS] & 1 << CFG_READONLY;
 	COPY_BIT(pwr_flags, mem_array[B_ACCESS], CFG_READONLY);
 }
@@ -451,7 +458,7 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) {
 				
 				if(rx_bytes != i) return;
 				
-				if((arg < NUM_PAGES) || (arg >= P_CNT0 && arg < SIG_PAGES_END && (~lock_sw & 1 << LOCK_SW_BIT))) {
+				if((arg < NUM_PAGES) || (arg >= P_CNT0 && arg < SIG_PAGES_END)) {
 					if(op == C_WRITE) {
 						reply_status(write_data(arg, 2));
 					}
@@ -591,7 +598,7 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) {
 			}
 
 			if(op == FC_READ){
-				flash_state |= 1 << NEED_READ;
+				memcpy_P (mem_array, (PGM_VOID_P*) ((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2), NUM_PAGES*4);
 				reply_status(R_ACK);
 			}
 		}
@@ -663,7 +670,7 @@ uint8_t write_data(uint8_t page, uint8_t src) {
 }
 
 void buf_save(uint8_t page, uint8_t src) {
-	uint8_t *dst_ptr, *src_ptr, BL_bits;
+	uint8_t *dst_ptr, *src_ptr;
 	dst_ptr = mem_array + (uint8_t)(page << 2);
 	src_ptr = rx_buf + src;
 	
@@ -683,53 +690,6 @@ void buf_save(uint8_t page, uint8_t src) {
 	);
 	
 	if(page == 2) { src0 = *(dst_ptr+0); } // do not update BCC1
-	
-	if(lock_sw & 1 << LOCK_SW_BIT) {
-		if(page == 2)  { src1 = *(dst_ptr+1); } // do not update internal byte
-		if(page == P_DYNL) { src3 = *(dst_ptr+3); } // do not update RFU byte
-		if(page == P_PACK) {
-			src2 = *(dst_ptr+2);
-			src3 = *(dst_ptr+3);
-		}
-		
-		// logical OR OTP pages
-		if(page == P_DYNL || (page | 1) == 3) {
-			src0 |= *(dst_ptr+0);
-			src1 |= *(dst_ptr+1);
-			src2 |= *(dst_ptr+2);
-			src3 |= *(dst_ptr+3);
-		}
-		
-		// revert bits locked by block-locking bits
-		if(page == 2) {
-			if(lock_b0 & 1 << BL_OTP) {
-				COPY_BIT(src2, lock_b0, 3);
-			}
-			
-			if(lock_b0 & 1 << BL_94) {
-				src2 |= lock_b0 & 0b11110000;
-				src2 &= lock_b0 | 0b00001111;
-				COPY_BIT(src3, lock_b1, 0);
-				COPY_BIT(src3, lock_b1, 1);
-			}
-			
-			if(lock_b0 & 1 << BL_FA) {
-				src3 |= lock_b1 & 0b11111100;
-				src3 &= lock_b1 | 0b00000011;
-			}
-		}
-		
-		if(page == P_DYNL) {
-			BL_bits = mem_array[B_DYNL_2]; // read BL-bits without affecting lock_b4
-			
-			if(BL_bits & 1 << 0) { COPY_BIT(src0, lock_b2, 0); COPY_BIT(src0, lock_b2, 1); }
-			if(BL_bits & 1 << 1) { COPY_BIT(src0, lock_b2, 2); COPY_BIT(src0, lock_b2, 3); }
-			if(BL_bits & 1 << 2) { COPY_BIT(src0, lock_b2, 4); COPY_BIT(src0, lock_b2, 5); }
-			if(BL_bits & 1 << 3) { COPY_BIT(src0, lock_b2, 6); COPY_BIT(src0, lock_b2, 7); }
-			
-			if(BL_bits & 1 << 4) { COPY_BIT(src1, lock_b3, 0); COPY_BIT(src1, lock_b3, 1); }
-		}
-	}
 	
 	// recompute BCC0 and BCC1
 	if(page == 0)  src3 = R_CT ^ src0 ^ src1 ^ src2;
