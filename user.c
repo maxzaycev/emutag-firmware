@@ -254,8 +254,8 @@ void user_pwr_cycle(void) {
 			"ldi	r24, 5		\n\t" // Flash write command = 00000101
 			"out	%1, r24		\n\t"
 			"spm			\n\t"
-			"adiw	r30, 32	\n\t"
-			"adiw	r30, 32	\n\t"
+			"adiw	r30, 32		\n\t"
+			"adiw	r30, 32		\n\t"
 			"dec	r28		\n\t"
 			"brne	.-48		\n\t"
 			: "=x" (asm_src)
