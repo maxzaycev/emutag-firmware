@@ -82,7 +82,8 @@
 // Flash address of signature page (last page)
 #define SIG_ADDR	0x0FC0
 //Flash address of Dump
-#define DUMP	0x0F00
+#define DUMP_1	0x0E40	//3648
+#define DUMP_2	0x0F00
 
 // Simulation of write delay to internal EEPROM: 4.1 ms fixed from request
 // TIMER0 is counting with prescaler = 1024 with count reset after receiving incoming message
@@ -100,9 +101,9 @@ register volatile uint8_t lock_b3  asm("r10");
 register volatile uint8_t lock_b4  asm("r11");
 
 register volatile uint8_t flash_state  asm("r12");
-
 #define NEED_WRITE	7
 #define NEED_READ	6
+
 // To save registers, lock switch position will be stored in MSB of lock_b4 containing BL-bits for pages 16-39
 #define lock_sw		lock_b4
 #define LOCK_SW_BIT	7
@@ -203,18 +204,23 @@ void prepare_read(void) __attribute__((noinline));
 void user_init(void) {
 	uint8_t *asm_dst, asm_len; // for macro
 	
-	memcpy_P (mem_array, (PGM_VOID_P*)DUMP, NUM_PAGES*4);
-	
 	FILL_BUF(passwd, 0xFF, 4);
 	
 	lock_b0 = lock_b1 = lock_b2 = lock_b3 = lock_b4 = 0;
-	
+
+	flash_state |= 1 << NEED_READ;
+
 	user_pwr_cycle();
 }
 
 void user_pwr_cycle(void) {
 	state = S_IDLE;
 	ctrl_flags &= ~(1 << F_ST_HALT);
+
+	if(flash_state & 1 << NEED_READ){
+		memcpy_P (mem_array, (PGM_VOID_P*) ((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2), NUM_PAGES*4);
+		flash_state &= ~(1 << NEED_READ);
+	}
 
 	if(flash_state & 1 << NEED_WRITE){
 		uint8_t *asm_src =  mem_array; // for macro
@@ -231,15 +237,19 @@ void user_pwr_cycle(void) {
 			"sei			\n\t"
 			"spm			\n\t"
 			"subi	r30, 254		\n\t"
-			"andi	r30, 63		\n\t"
-			"brne	.-18		\n\t"
+			"ldi	r25, 63		\n\t"
+			"and	r25, r30		\n\t"
+			"brne	.-20		\n\t"
 			"clr	r1		\n\t"
+			"subi	r30, 64		\n\t"
 			"ldi	r24, 5		\n\t" // Flash write command = 00000101
 			"out	%1, r24		\n\t"
 			"spm			\n\t"
+			"subi	r30, 192		\n\t"
+			"brne	.-42		\n\t"
 			: "=x" (asm_src)
-			: "I" (_SFR_IO_ADDR(SPMCSR)), "0" (asm_src), "z" (DUMP)
-			: "r0", "r24"
+			: "I" (_SFR_IO_ADDR(SPMCSR)), "0" (asm_src), "z" (((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2))
+			: "r0", "r24", "r25"
 		);
 
 		flash_state &= ~(1 << NEED_WRITE);
@@ -581,7 +591,7 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) {
 			}
 
 			if(op == FC_READ){
-				memcpy_P (mem_array, (PGM_VOID_P*)DUMP, NUM_PAGES*4);
+				flash_state |= 1 << NEED_READ;
 				reply_status(R_ACK);
 			}
 		}
