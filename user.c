@@ -84,12 +84,12 @@
 #define DUMP_1	0x0E40	//3648
 #define DUMP_2	0x0F00
 
-// Simulation of write delay to internal EEPROM: 4.1 ms fixed from request
+// Simulation of write delay to internal EEPROM: 3.8 ms fixed from request
 // TIMER0 is counting with prescaler = 1024 with count reset after receiving incoming message
 // bitrate = F_CPU / 128, TIMER0 prescaler = 1024, ratio = 8
-// 4.1 ms / (9 bit char / bitrate) = 48 byte frames
-// (48 frames * 9 - 3 (turnaround bit buffer compensation)) / 8 = 53 timer counts
-#define WRITE_DELAY	53
+// 3.8 ms / (9 bit char / bitrate) = 45 byte frames
+// (45 frames * 9 - 3 (turnaround bit buffer compensation)) / 8 = 50 timer counts
+#define WRITE_DELAY	50
 
 // registers contents are saved between function calls, except for shared registers
 register volatile uint8_t state    asm("r6");
