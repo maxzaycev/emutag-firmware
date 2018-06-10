@@ -1,6 +1,6 @@
-/********************************************************************************************
- **  EMUTAG SDK EXAMPLE FOR ULTRALIGHT EV1 (41 PAGE VERSION) EMULATION WITH AUTH SNIFFING  **
- ********************************************************************************************/
+/************************************************************************************************
+ **  EMUTAG 2 DUMPS FLASH STORE ULTRALIGHT EV1 (41 PAGE VERSION) EMULATION WITH AUTH SNIFFING  **
+ ***********************************************************************************************/
 
 #include <avr/io.h>
 #include <avr/pgmspace.h>
@@ -28,7 +28,6 @@
 //flash commands
 #define FC_READ		0xF0
 #define FC_WRITE	0xF1
-#define	FC_SHIFT	0xF2
 
 // response constants
 #define R_ATQA_H	0x00
@@ -210,7 +209,7 @@ void user_init(void) {
 	lock_b0 = lock_b1 = lock_b2 = lock_b3 = lock_b4 = 0;
 
 	asm volatile(
-		"clr	r12		\n\t"
+		"clr	r12		\n\t" 
 		"in	r24, %1		\n\t"
 		"bst	r24, %2		\n\t"
 		"bld	%0, %3		\n\t"
@@ -237,7 +236,7 @@ void user_pwr_cycle(void) {
 		asm volatile(
 			"ldi	r28, 8		\n\t"	//TODO: no magic const 1<<3
 			"lsr	r28		\n\t"
-			"breq	.+58		\n\t" //to exit TODO: turn off bits on r12
+			"breq	.+58		\n\t" //to exit TODO: turn off bits on r12 and exit
 			"mov	r24, r12		\n\t"
 			"and	r24, r28	\n\t"
 			"brne	.+8		\n\t" //to erase
@@ -267,13 +266,11 @@ void user_pwr_cycle(void) {
 			"inc	r30		\n\t"
 			"adiw	r30, 63		\n\t"
 			"rjmp	.-62		\n\t" //to test new
-			"clr	r12		\n\t" //TODO: clear only n bits
+			"clr	r12		\n\t" //TODO: clear only n bits and exit
 			: "=x" (asm_src)
 			: "I" (_SFR_IO_ADDR(SPMCSR)), "0" (asm_src), "z" (((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2))
 			: "r0", "r24", "r25", "r28"
 		);
-		//debug only
-		++cnt2[0];
 	}
 
 	sig_pages = 0;
@@ -749,7 +746,7 @@ void buf_save(uint8_t page, uint8_t src) {
 			: "r"  (src0), "r" (src1), "0" (dst_ptr)
 		);
 	}
-	
+
 	while(TCNT0 < WRITE_DELAY);
 }
 
