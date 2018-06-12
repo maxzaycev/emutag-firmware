@@ -104,6 +104,12 @@ register volatile uint8_t flash_state  asm("r12");
 #define NEED_WRITE_PART_2	1
 #define NEED_WRITE_PART_3	0
 
+register volatile uint8_t reply_state  asm("r13");
+#define NOT_REQUESTED	0
+#define INIT	1
+#define PREPARE	2
+#define DONE	3
+
 // To save registers, lock switch position will be stored in MSB of lock_b4 containing BL-bits for pages 16-39
 #define lock_sw		lock_b4
 #define LOCK_SW_BIT	7
@@ -209,7 +215,7 @@ void user_init(void) {
 	lock_b0 = lock_b1 = lock_b2 = lock_b3 = lock_b4 = 0;
 
 	asm volatile(
-		"clr	r12		\n\t" 
+		"clr	r12		\n\t"
 		"in	r24, %1		\n\t"
 		"bst	r24, %2		\n\t"
 		"bld	%0, %3		\n\t"
@@ -223,10 +229,14 @@ void user_init(void) {
 	);
 
 	memcpy_P (mem_array, (PGM_VOID_P*) ((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2), NUM_PAGES*4);
+	reply_state = INIT;
 	user_pwr_cycle();
 }
 
 void user_pwr_cycle(void) {
+	if (reply_state == NOT_REQUESTED)
+		return;
+	reply_state = NOT_REQUESTED;
 	state = S_IDLE;
 	ctrl_flags &= ~(1 << F_ST_HALT);
 
@@ -278,9 +288,13 @@ void user_pwr_cycle(void) {
 
 	//pwr_flags = mem_array[B_ACCESS] & 1 << CFG_READONLY;
 	COPY_BIT(pwr_flags, mem_array[B_ACCESS], CFG_READONLY);
+	if(lock_sw & 1 << LOCK_SW_BIT) {
+		++cnt2[2];
+	}
 }
 
 void user_frame_end(void) {
+	reply_state = DONE;
 	if(sig_pages == 0xff) {
 		// erase Flash page and write values from page buffer
 		asm volatile(
