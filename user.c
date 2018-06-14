@@ -288,9 +288,6 @@ void user_pwr_cycle(void) {
 
 	//pwr_flags = mem_array[B_ACCESS] & 1 << CFG_READONLY;
 	COPY_BIT(pwr_flags, mem_array[B_ACCESS], CFG_READONLY);
-	if(lock_sw & 1 << LOCK_SW_BIT) {
-		++cnt2[2];
-	}
 }
 
 void user_frame_end(void) {
@@ -634,7 +631,9 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) {
 			}
 
 			if(op == FC_READ){
-				memcpy_P (mem_array, (PGM_VOID_P*) ((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2), NUM_PAGES*4);
+				if (rx_bytes > 1)
+					return;
+				memcpy_P(mem_array, (PGM_VOID_P*) ((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2), NUM_PAGES*4);
 				reply_status(R_ACK);
 			}
 		}
