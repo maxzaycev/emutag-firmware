@@ -104,11 +104,13 @@ register volatile uint8_t flash_state  asm("r12");
 #define NEED_WRITE_PART_2	1
 #define NEED_WRITE_PART_3	0
 
-register volatile uint8_t reply_state  asm("r13");
+register volatile uint8_t reply_state  asm("r14");
 #define NOT_REQUESTED	0
 #define INIT	1
 #define PREPARE	2
 #define DONE	3
+
+register volatile uint8_t shift_state  asm("r13");
 
 // To save registers, lock switch position will be stored in MSB of lock_b4 containing BL-bits for pages 16-39
 #define lock_sw		lock_b4
@@ -207,6 +209,11 @@ uint8_t buf_cmp(uint8_t *src_ptr, uint8_t *dst_ptr, uint8_t len, uint8_t bits) _
 
 void prepare_read(void) __attribute__((noinline));
 
+void load_dump(void){
+	shift_state = lock_sw & 1 << LOCK_SW_BIT;
+	memcpy_P (mem_array, (PGM_VOID_P*) ((shift_state) ? DUMP_1 : DUMP_2), NUM_PAGES*4);
+}
+
 void user_init(void) {
 	uint8_t *asm_dst, asm_len; // for macro
 	
@@ -227,8 +234,7 @@ void user_init(void) {
 			"I" (LOCK_SW_BIT), "I" (S_AUTH_BIT), "M" (1 << S_AUTH_BIT), "0" (lock_sw)
 		: "r24"
 	);
-
-	memcpy_P (mem_array, (PGM_VOID_P*) ((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2), NUM_PAGES*4);
+	load_dump();
 	reply_state = INIT;
 	user_pwr_cycle();
 }
@@ -354,6 +360,9 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) {
 					//asm volatile("in %0, %1" : "=r" (lock_sw) : "I" (_SFR_IO_ADDR(LOCK_PORT)));
 					
 					//state_auth = (lock_sw & 1 << LOCK_SW_BIT) ? 0 : 1;
+
+					if ((lock_sw ^ shift_state) & 1 << LOCK_SW_BIT)
+						load_dump();
 					
 					i = mem_array[B_ACCESS];
 					passwd_limit = i & 7;
