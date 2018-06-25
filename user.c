@@ -93,24 +93,20 @@
 
 // registers contents are saved between function calls, except for shared registers
 register volatile uint8_t state    asm("r6");
-register volatile uint8_t lock_b0  asm("r7");
-register volatile uint8_t lock_b1  asm("r8");
-register volatile uint8_t lock_b2  asm("r9");
-register volatile uint8_t lock_b3  asm("r10");
-register volatile uint8_t lock_b4  asm("r11");
+register volatile uint8_t lock_b4  asm("r7");
 
-register volatile uint8_t flash_state  asm("r12");
+register volatile uint8_t flash_state  asm("r8");
 #define NEED_WRITE_PART_1	2
 #define NEED_WRITE_PART_2	1
 #define NEED_WRITE_PART_3	0
 
-register volatile uint8_t reply_state  asm("r14");
+register volatile uint8_t reply_state  asm("r9");
 #define NOT_REQUESTED	0
 #define INIT	1
 #define PREPARE	2
 #define DONE	3
 
-register volatile uint8_t shift_state  asm("r13");
+register volatile uint8_t shift_state  asm("r10");
 
 // To save registers, lock switch position will be stored in MSB of lock_b4 containing BL-bits for pages 16-39
 #define lock_sw		lock_b4
@@ -219,10 +215,10 @@ void user_init(void) {
 	
 	FILL_BUF(passwd, 0xFF, 4);
 	
-	lock_b0 = lock_b1 = lock_b2 = lock_b3 = lock_b4 = 0;
+	lock_b4 = 0;
 
 	asm volatile(
-		"clr	r12		\n\t"
+		"clr	r8		\n\t"
 		"in	r24, %1		\n\t"
 		"bst	r24, %2		\n\t"
 		"bld	%0, %3		\n\t"
@@ -252,8 +248,8 @@ void user_pwr_cycle(void) {
 		asm volatile(
 			"ldi	r28, 8		\n\t"	//TODO: no magic const 1<<3
 			"lsr	r28		\n\t"
-			"breq	.+58		\n\t" //to exit TODO: turn off bits on r12 and exit
-			"mov	r24, r12		\n\t"
+			"breq	.+58		\n\t" //to exit TODO: turn off bits on r8 and exit
+			"mov	r24, r8		\n\t"
 			"and	r24, r28	\n\t"
 			"brne	.+8		\n\t" //to erase
 			"subi	r26, 192		\n\t"
@@ -282,7 +278,7 @@ void user_pwr_cycle(void) {
 			"inc	r30		\n\t"
 			"adiw	r30, 63		\n\t"
 			"rjmp	.-62		\n\t" //to test new
-			"clr	r12		\n\t" //TODO: clear only n bits and exit
+			"clr	r8		\n\t" //TODO: clear only n bits and exit
 			: "=x" (asm_src)
 			: "I" (_SFR_IO_ADDR(SPMCSR)), "0" (asm_src), "z" (((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2))
 			: "r0", "r24", "r25", "r28"
