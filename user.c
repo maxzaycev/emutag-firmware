@@ -634,13 +634,6 @@ void user_proc(uint8_t rx_bytes, uint8_t rx_bits, uint8_t rx_bits_total) {
 				}
 				reply_status(R_ACK);
 			}
-
-			if(op == FC_READ){
-				if (rx_bytes > 1)
-					return;
-				memcpy_P(mem_array, (PGM_VOID_P*) ((lock_sw & 1 << LOCK_SW_BIT) ? DUMP_1 : DUMP_2), NUM_PAGES*4);
-				reply_status(R_ACK);
-			}
 		}
 	}
 }
