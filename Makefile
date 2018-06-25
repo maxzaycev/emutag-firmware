@@ -4,22 +4,18 @@ DEVICE     = attiny4313
 CFLAGS     = -Wall -Os -mmcu=$(DEVICE) -Wl,--relax
 LFLAGS     = -Wl,-Map=main.map,--cref
 
-all: copy
+all: build
 all: disasm
 all: size
 
-flash: copy
-	avrdude $(PROGRAMMER) -p $(DEVICE) -U flash:w:firmware.bin:r -U eeprom:w:common.eep:r -U efuse:w:0xfe:m -U hfuse:w:0xdf:m -U lfuse:w:0xdf:m
-
-copy: build
-	cp tmpl.bin firmware.bin
-	dd if=main.bin of=firmware.bin conv=notrunc
+flash: build
+	avrdude $(PROGRAMMER) -p $(DEVICE) -U flash:w:main.bin:r -U eeprom:w:common.eep:r -U efuse:w:0xfe:m -U hfuse:w:0xdf:m -U lfuse:w:0xdf:m
 
 flash-only:
-	avrdude $(PROGRAMMER) -p $(DEVICE) -U flash:w:firmware.bin:r -U eeprom:w:common.eep:r -U efuse:w:0xfe:m -U hfuse:w:0xdf:m -U lfuse:w:0xdf:m
+	avrdude $(PROGRAMMER) -p $(DEVICE) -U flash:w:main.bin:r -U eeprom:w:common.eep:r -U efuse:w:0xfe:m -U hfuse:w:0xdf:m -U lfuse:w:0xdf:m
 
 clean:
-	rm -f user.o main.elf main.bin main.lst main.map firmware.bin
+	rm -f user.o main.elf main.bin main.lst main.map
 
 compile:
 	avr-gcc -c $(CFLAGS) -o user.o user.c
@@ -35,4 +31,3 @@ disasm: link
 
 size: link
 	avr-size -C --mcu=$(DEVICE) main.elf
-
