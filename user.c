@@ -106,7 +106,7 @@ register volatile uint8_t reply_state  asm("r9");
 #define PREPARE	2
 #define DONE	3
 
-register volatile uint8_t shift_state  asm("r10");
+register volatile uint8_t shift_state  asm("r13");
 
 // To save registers, lock switch position will be stored in MSB of lock_b4 containing BL-bits for pages 16-39
 #define lock_sw		lock_b4
