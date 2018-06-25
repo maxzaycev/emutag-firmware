@@ -229,7 +229,7 @@ void prepare_read(void) __attribute__((noinline));
 
 void load_dump(void){
 	shift_state = lock_sw & 1 << LOCK_SW_BIT;
-	memcpy_P (mem_array, ((shift_state) ? &dump1 : &dump2), NUM_PAGES*4);
+	memcpy_P (mem_array, ((shift_state) ? dump1 : dump2), NUM_PAGES*4);
 }
 
 void user_init(void) {
@@ -302,7 +302,7 @@ void user_pwr_cycle(void) {
 			"rjmp	.-62		\n\t" //to test new
 			"clr	r8		\n\t" //TODO: clear only n bits and exit
 			: "=x" (asm_src)
-			: "I" (_SFR_IO_ADDR(SPMCSR)), "0" (asm_src), "z" (((lock_sw & 1 << LOCK_SW_BIT) ? &dump1 : &dump2))
+			: "I" (_SFR_IO_ADDR(SPMCSR)), "0" (asm_src), "z" (((lock_sw & 1 << LOCK_SW_BIT) ? dump1 : dump2))
 			: "r0", "r24", "r25", "r28"
 		);
 	}
